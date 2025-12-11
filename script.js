@@ -152,8 +152,6 @@ function setupSheets() {
     });
 }
 
-// Fungsi logError telah dihapus
-
 /**
  * Fungsi pembantu untuk mengembalikan respons JSON yang valid.
  */
@@ -415,8 +413,9 @@ function getActiveDebts(limit = 50) {
             
             if (rowStatus === "TERHUTANG" && debtAmount > 0) {
                 let rowDate = '';
+                // >>> PERBAIKAN DI SINI: Menggunakan format tanggal/waktu yang lebih detail <<<
                 if (rowTimestamp instanceof Date) {
-                    rowDate = Utilities.formatDate(rowTimestamp, spreadsheet.getSpreadsheetTimeZone(), 'dd MMM yyyy HH:mm');
+                    rowDate = Utilities.formatDate(rowTimestamp, spreadsheet.getSpreadsheetTimeZone(), 'dd MMM yyyy HH:mm:ss');
                 }
                 
                 allDebts.push({
@@ -463,12 +462,12 @@ function submitTransaction(params) {
   const onlineMasuk = cleanRupiahAndParse(params.onlineMasuk);
   const jumlahTerhutang = cleanRupiahAndParse(params.jumlahTerhutang);
 
-  // Menyiapkan data baris baru
-  const timestampValue = params.timestamp ? new Date(params.timestamp) : new Date();
+  // >>> PERBAIKAN DI SINI: Menggunakan new Date() dari server Apps Script <<<
+  const timestampValue = new Date(); 
   const formattedTimestamp = Utilities.formatDate(timestampValue, spreadsheet.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm:ss');
 
   const row = [
-    formattedTimestamp, // A: Timestamp
+    formattedTimestamp, // A: Timestamp (Waktu Server Akurat)
     params.channel || '',          // B: Channel
     params.produk || '',           // C: Produk
     params.identitas || '',        // D: Identitas
