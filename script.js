@@ -51,10 +51,10 @@ function doGet(e) {
       return jsonResponse({ status: "SUCCESS", balance: balance });
     }
     
-    // --- AKSI BARU: Mengambil daftar utang terbaru untuk Slideshow ---
-    if (action === 'getRecentDebts') {
-        const limit = e.parameter.limit ? parseInt(e.parameter.limit) : 20; // Default 20
-        const debts = getRecentDebts(limit);
+    // --- AKSI BARU: Mengambil daftar utang terbaru untuk Slideshow (diperbarui) ---
+    if (action === 'getActiveDebts') {
+        const limit = e.parameter.limit ? parseInt(e.parameter.limit) : 50; // Default 50
+        const debts = getActiveDebts(limit);
         return jsonResponse({ status: "SUCCESS", data: debts });
     }
     // -----------------------------------------------------------------
@@ -377,12 +377,12 @@ function addCashBalance(amount) {
     };
 }
 
-// ------------------- LOGIC: DATA UTANG TERBARU (SLIDESHOW) -------------------
+// ------------------- LOGIC: DATA UTANG AKTIF (SLIDESHOW) -------------------
 
 /**
  * Mengambil daftar N utang terbaru dari semua sheet transaksi yang masih berstatus 'Terhutang'.
  */
-function getRecentDebts(limit = 20) {
+function getActiveDebts(limit = 50) {
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     let allDebts = [];
 
@@ -391,9 +391,9 @@ function getRecentDebts(limit = 20) {
         if (!sheet || sheet.getLastRow() <= 1) continue; 
         
         // Ambil range dari Kolom A (Timestamp) sampai K (Jumlah Terhutang)
-        // Batasi hanya mengambil data terbaru (misalnya, 500 baris terakhir)
+        // Batasi hanya mengambil data terbaru (misalnya, 1000 baris terakhir) untuk performa
         const lastRow = sheet.getLastRow();
-        const startRow = Math.max(2, lastRow - 500); // Mulai dari baris data atau 500 baris ke atas
+        const startRow = Math.max(2, lastRow - 1000); 
         const numRows = lastRow - startRow + 1;
 
         if (numRows <= 0) continue;
@@ -473,7 +473,7 @@ function submitTransaction(params) {
     params.produk || '',           // C: Produk
     params.identitas || '',        // D: Identitas
     params.ewallet || '',          // E: E-Wallet
-    params.status || 'Selesai',    // F: Status
+    params.status || 'Lunas',    // F: Status (Default Lunas)
     hargaChannel, // G: Harga Channel
     hargaJual,    // H: Harga Jual
     cashDiterimaAgen, // I: Cash Diterima Agen
@@ -515,7 +515,9 @@ function searchForDebt(identitas, date) {
                 rowDate = Utilities.formatDate(rowTimestamp, spreadsheet.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
             }
             
+            // Identitas: Mencocokkan sebagian (includes)
             const identitasMatch = !searchIdentitas || rowIdentitas.includes(searchIdentitas);
+            // Tanggal: Mencocokkan penuh atau tidak ada filter tanggal
             const dateMatch = !date || rowDate === date;
             const isDebt = rowStatus.toUpperCase() === "TERHUTANG" && debtAmount > 0;
             
@@ -552,6 +554,7 @@ function updateDebtEntry(debtId, mode, amount) {
     const cashRange = sheet.getRange(rowNumber, CASH_RECEIVE_COL_INDEX);
     const statusRange = sheet.getRange(rowNumber, STATUS_COL_INDEX);
 
+    // Ambil nilai yang saat ini ada di spreadsheet
     let currentDebt = cleanRupiahAndParse(debtRange.getValue());
     let currentCash = cleanRupiahAndParse(cashRange.getValue());
 
@@ -564,15 +567,16 @@ function updateDebtEntry(debtId, mode, amount) {
     let message = '';
 
     if (mode === 'lunas') {
-        actionNominal = currentDebt;
+        actionNominal = currentDebt; // Nominal yang dibayar adalah sisa hutang
         finalNominal = 0;
         
         // Update nilai
+        // Cash Diterima Agen (Kolom I) bertambah sebesar nilai hutang yang dibayar
         cashRange.setValue(currentCash + actionNominal);
-        debtRange.setValue(0); 
+        debtRange.setValue(0); // Set Jumlah Terhutang (Kolom K) menjadi 0
         statusRange.setValue("Lunas");
         
-        message = "Hutang di set Lunas.";
+        message = `Hutang diset Lunas. Nominal ${actionNominal.toLocaleString('id-ID')} dicatat sebagai Cash Diterima.`;
     } 
     else if (mode === 'partial') {
         const paymentAmount = cleanRupiahAndParse(amount);
@@ -595,7 +599,7 @@ function updateDebtEntry(debtId, mode, amount) {
             statusRange.setValue("Lunas");
         }
         
-        message = `Pembayaran sebagian sebesar ${actionNominal.toLocaleString('id-ID')} berhasil dicatat.`;
+        message = `Pembayaran sebagian sebesar ${actionNominal.toLocaleString('id-ID')} berhasil dicatat. Sisa hutang: ${finalNominal.toLocaleString('id-ID')}.`;
     } else {
         throw new Error("Mode update tidak valid.");
     }
