@@ -181,3 +181,75 @@ function setupSheets() {
         if (!ss.getSheetByName(n)) ss.insertSheet(n).appendRow(['Timestamp', 'Nominal', 'Tipe']);
     });
 }
+// --- BAGIAN BARU: LOGIKA LIMIT SETOR ---
+
+const LIMIT_SETOR_SHEET_NAME = 'Limit_Setor';
+const DEFAULT_LIMITS = [
+  ["DANA Indomaret", 2],
+  ["DANA Alfamart", 4],
+  ["Gopay Indomaret", 4],
+  ["Gopay Alfamart", 4],
+  ["Shopepay Indomaret", 10],
+  ["Shopepay Alfamart", 10]
+];
+
+// Fungsi untuk mengecek dan mereset limit setiap tanggal 1
+function checkAndResetLimits() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(LIMIT_SETOR_SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(LIMIT_SETOR_SHEET_NAME);
+    sheet.appendRow(["Channel", "Limit Tersisa", "Last Reset (MM-YYYY)"]);
+    const currentMonth = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "MM-yyyy");
+    DEFAULT_LIMITS.forEach(item => sheet.appendRow([item[0], item[1], currentMonth]));
+    return;
+  }
+
+  const currentMonth = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "MM-yyyy");
+  const lastReset = sheet.getRange(2, 3).getDisplayValue();
+
+  if (currentMonth !== lastReset) {
+    const newData = DEFAULT_LIMITS.map(item => [item[1], currentMonth]);
+    sheet.getRange(2, 2, newData.length, 2).setValues(newData);
+  }
+}
+
+// Fungsi untuk mengambil data limit ke UI
+function getLimitsData() {
+  checkAndResetLimits();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LIMIT_SETOR_SHEET_NAME);
+  const data = sheet.getRange(2, 1, 6, 2).getValues();
+  let result = {};
+  data.forEach(row => { result[row[0]] = row[1]; });
+  return result;
+}
+
+/** * REVISI FUNGSI: Modifikasi fungsi addBankJagoBalance Anda agar mendukung pengurangan limit
+ * Cari fungsi addBankJagoBalance yang lama dan GANTI dengan yang ini
+ */
+function addBankJagoBalance(amount, via) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(BALANCE_BANK_JAGO_SHEET_NAME);
+    const nominal = cleanRupiahAndParse(amount);
+    const ts = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    
+    sheet.appendRow([ts, nominal, "Tambah Saldo via " + (via || "Transfer")]);
+    
+    // Logika Pengurangan Limit
+    if (via && via !== "Transfer Bank") {
+      const limitSheet = ss.getSheetByName(LIMIT_SETOR_SHEET_NAME);
+      const data = limitSheet.getRange(2, 1, 6, 2).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (data[i][0] === via) {
+          const currentLimit = parseInt(data[i][1]);
+          limitSheet.getRange(i + 2, 2).setValue(currentLimit - 1);
+          break;
+        }
+      }
+    }
+    return { status: "SUCCESS", message: "Saldo & Limit terupdate" };
+}
+
+// Tambahkan "if (action === 'getLimits') ..." di dalam fungsi doGet(e) Anda yang sudah ada
+
